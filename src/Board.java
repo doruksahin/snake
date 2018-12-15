@@ -13,7 +13,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 import javax.swing.Timer;
 
-public class Board extends JPanel implements ActionListener {
+public class Board extends JPanel implements ActionListener{
 
     private final int B_WIDTH = 300;
     private final int B_HEIGHT = 300;
@@ -28,86 +28,113 @@ public class Board extends JPanel implements ActionListener {
     private int dots;
     private int apple_x;
     private int apple_y;
+    private int difficulty;
+    private int delay;
 
     private boolean leftDirection = false;
     private boolean rightDirection = true;
     private boolean upDirection = false;
     private boolean downDirection = false;
+
     private boolean inGame = true;
+    private boolean timePassedFlag = true;
+    private long startTime;
+    private long endTime;
 
     private Timer timer;
-    private Image ball;
-    private Image apple;
-    private Image head;
-
-    private String difficulty;
+    ControlHandler ch;
 
     public Board(String difficulty) {
-        initBoard();
-        this.difficulty = difficulty;
+        ch = new ControlHandler(this);
+        ch.position();
+        ch.addAll();
+        //ch.getEndText().setVisible(true);
+
+        initBoard(difficulty);
     }
 
 
-    private void initBoard() {
+    private void initBoard(String difficulty) {
 
+        // Table setup
         addKeyListener(new TAdapter());
         setBackground(Color.black);
         setFocusable(true);
+        setPreferredSize(new Dimension(B_WIDTH, B_HEIGHT + 30));
+        timer = new Timer(DELAY, this);
+        timer.start();
+        startTime = System.nanoTime();
 
-        setPreferredSize(new Dimension(B_WIDTH, B_HEIGHT));
+        // SnakeGame's initial length is 3.
+        dots = 3;
+        // init snake's location
+        for (int z = 0; z < dots; z++) {
+            x[z] = 50;
+            y[z] = 50;
+        }
+        locateApple();
+
+        // easy -> 0, medium -> 1, hard -> 2
+        // Hard : Walls, speeds up
+        // Medium : Walls
+        // Easy : No restriction
+        this.difficulty = mappingDifficulty(difficulty);
         initGame();
     }
 
 
 
-    private void initGame() {
-        dots = 3;
-
-        for (int z = 0; z < dots; z++) {
-            x[z] = 50 - z * 10;
-            y[z] = 50;
-        }
-
-        locateApple();
-
-        timer = new Timer(DELAY, this);
-        timer.start();
+    private void initGame(){
+        move();
+        ch.getCurrentSpeed().setText("Speed: " + 0);
     }
+
+
+
+
 
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
         doDrawing(g);
+
+        //Kontrol panelinin oldugu kisim boyandi.
+        g.setColor(new Color(120, 120, 120, 200));
+        g.fillRect((B_HEIGHT/2), B_WIDTH + 4, 190, 25);
     }
 
 
-    // Elmayi ve yilani cizme islemi.
+    // Drawing apple and snake
     private void doDrawing(Graphics g) {
 
         if (inGame) {
-            g.drawRect(apple_x, apple_y, 5, 5);
+            g.drawRect(apple_x, apple_y, 10, 10);
 
             for (int z = 0; z < dots; z++) {
                 if (z == 0) {
-                    g.drawRect(x[z], y[z], 5, 5);
+                    g.drawRect(x[z], y[z], 10, 10);
                 } else {
-                    g.drawRect(x[z], y[z], 5, 5);
+                    g.drawRect(x[z], y[z], 10, 10);
                 }
             }
             Toolkit.getDefaultToolkit().sync(); // Bu nedir?
         } else {
             gameOver(g);
+            endGame();
         }
 
-        g.setColor(Color.red);
-        for(int i = 0; i < B_WIDTH; i++){
-            g.drawRect(0, i, 5, 5);
-            g.drawRect(B_HEIGHT-4, i, 5, 5);
-        }
+        // if game isnt easy, draw the walls
+        if(difficulty != 0) {
+            g.setColor(Color.red);
+            for (int i = 0; i < B_WIDTH; i++) {
+                g.drawRect(0, i, 5, 5);
+                g.drawRect(B_HEIGHT - 4, i, 5, 5);
+            }
 
-        for(int i = 0; i < B_HEIGHT; i++){
-            g.drawRect(i, 0, 5, 5);
-            g.drawRect(i, B_HEIGHT-4, 5, 5);
+            for (int i = 0; i < B_HEIGHT; i++) {
+                g.drawRect(i, 0, 5, 5);
+                g.drawRect(i, B_HEIGHT - 4, 5, 5);
+            }
         }
 
 
@@ -127,11 +154,17 @@ public class Board extends JPanel implements ActionListener {
     // Yilanin kafasi elmaya geldiyse yilan buyudu.
     // TODO Duzgun bir hiz fonksiyonu yazilacak.
     private void checkApple() {
-
         if ((x[0] == apple_x) && (y[0] == apple_y)) {
             dots++;
             locateApple();
-            if(difficulty.equals("Hard")) timer.setDelay(DELAY - dots * 10);
+            if(difficulty == 2) {
+                setSpeed();
+                ch.getCurrentSpeed().setText("Speed: " + ((double)1/(double)delay)*100);
+                System.out.println(((double)1/(double)delay)*100);
+            }
+            else
+                ch.getCurrentSpeed().setText("Speed: 1");
+
         }
     }
 
@@ -149,33 +182,30 @@ public class Board extends JPanel implements ActionListener {
         if (leftDirection) {
             x[0] -= DOT_SIZE;
             if(x[0] < 0)
-                if(!difficulty.equals("Hard"))
+                // if its not hard, no wall restrictions
+                if(difficulty != 2)
                     x[0] += B_WIDTH;
-            else
-                if(!difficulty.equals("Hard"))
-                    x[0] = x[0] % B_WIDTH;
+
         }
 
         if (rightDirection) {
             x[0] += DOT_SIZE;
-            if(!difficulty.equals("Hard"))
+            if(difficulty != 2)
                 x[0] = x[0] % B_WIDTH;
         }
 
         if (upDirection) {
             y[0] -= DOT_SIZE;
             if(y[0] < 0)
-                if(!difficulty.equals("Hard"))
+                if(difficulty != 2)
                     y[0] += B_HEIGHT;
-            else
-                if(!difficulty.equals("Hard"))
-                    x[0] = x[0] % B_HEIGHT;
+
         }
 
         if (downDirection) {
             y[0] += DOT_SIZE;
-            if(!difficulty.equals("Hard"))
-                x[0] = x[0] % B_HEIGHT;
+            if(difficulty != 2)
+                y[0] = y[0] % B_HEIGHT;
         }
     }
 
@@ -204,6 +234,8 @@ public class Board extends JPanel implements ActionListener {
 
         if (!inGame) {
             timer.stop();
+            endTime = System.nanoTime();
+
         }
     }
 
@@ -228,12 +260,10 @@ public class Board extends JPanel implements ActionListener {
         repaint();
     }
 
-    // Kullaniciya sunulan klavye arayuzunun implementasyonu
-    private class TAdapter extends KeyAdapter {
 
+    private class TAdapter extends KeyAdapter {
         @Override
         public void keyPressed(KeyEvent e) {
-
             int key = e.getKeyCode();
 
             if ((key == KeyEvent.VK_LEFT) && (!rightDirection)) {
@@ -261,4 +291,33 @@ public class Board extends JPanel implements ActionListener {
             }
         }
     }
+
+    private int mappingDifficulty(String difficulty){
+        if(difficulty.equals("Easy"))
+            return 0;
+        else if(difficulty.equals("Medium"))
+            return 1;
+        else
+            return 2;
+    }
+
+    // When snake eats apple, speed up the timer
+    private void setSpeed(){
+        //delay = (int)(DELAY - (Math.log(dots) / Math.log(1.5)));
+        delay = (int)(DELAY - dots * 4);
+        timer.setDelay(delay);
+    }
+
+    private void endGame(){
+        ch.getTimePassed().setVisible(true);
+        if(timePassedFlag){
+            ch.getTimePassed().setText("Time: " + (endTime - startTime)/10000000);
+            timePassedFlag = false;
+        }
+    }
+
+
+
+
+
 }
